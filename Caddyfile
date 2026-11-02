@@ -1,0 +1,6 @@
+{$KC_DOMAIN} {
+	encode gzip
+
+	# Keep the management port (9000: health/metrics) private; only proxy the app port
+	reverse_proxy keycloak:8080
+}

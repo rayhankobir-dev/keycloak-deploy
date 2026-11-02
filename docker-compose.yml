@@ -1,0 +1,65 @@
+services:
+  keycloak:
+    build: .
+    image: keycloak-aiven:26.4
+    restart: unless-stopped
+    environment:
+      # --- Database: Aiven for PostgreSQL (SSL is mandatory on Aiven) ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://${AIVEN_PG_HOST}:${AIVEN_PG_PORT}/${AIVEN_PG_DATABASE}?sslmode=${AIVEN_PG_SSLMODE:-require}${AIVEN_PG_SSLROOTCERT:+&sslrootcert=/opt/keycloak/conf/certs/ca.pem}
+      KC_DB_USERNAME: ${AIVEN_PG_USER}
+      KC_DB_PASSWORD: ${AIVEN_PG_PASSWORD}
+      # Aiven plans cap connections; keep the pool well under the limit
+      KC_DB_POOL_INITIAL_SIZE: 2
+      KC_DB_POOL_MIN_SIZE: 2
+      KC_DB_POOL_MAX_SIZE: ${KC_DB_POOL_MAX_SIZE:-10}
+
+      # --- HTTP / proxy: TLS terminates at Caddy, Keycloak speaks HTTP inside ---
+      KC_HOSTNAME: https://${KC_DOMAIN}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+
+      # --- First-boot admin (only used when the master realm has no admin) ---
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-info}
+      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=70"
+    volumes:
+      # Aiven CA cert, used only when AIVEN_PG_SSLMODE=verify-full
+      - ./certs:/opt/keycloak/conf/certs:ro
+    healthcheck:
+      # The Keycloak image has no curl, so this uses bash's /dev/tcp
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KC_DOMAIN: ${KC_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
