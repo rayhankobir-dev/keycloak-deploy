@@ -1,7 +1,7 @@
 services:
   keycloak:
     build: .
-    image: keycloak-custom:26.4
+    image: keycloak-custom:26.8
     restart: unless-stopped
     # All Keycloak settings come from .env using Keycloak's own KC_* names
     env_file: .env
