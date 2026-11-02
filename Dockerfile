@@ -1,5 +1,5 @@
 # Optimized Keycloak image: build-time options are baked in so startup is fast.
-FROM quay.io/keycloak/keycloak:26.4 AS builder
+FROM quay.io/keycloak/keycloak:26.8 AS builder
 
 ENV KC_DB=postgres \
     KC_HEALTH_ENABLED=true \
